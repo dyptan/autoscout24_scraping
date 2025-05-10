@@ -1,75 +1,101 @@
-# Autoscout24 Scraping and Polynomial Regression Project
-
-![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)
-
-This project is a Python-based web scraping and data analysis tool designed to collect vehicle listings from the Autoscout24 website. It aims to perform polynomial regression on the average prices of vehicles, binned by thousands of miles, and select the best polynomial degree using k-fold cross-validation.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Requirements](#requirements)
-- [Usage](#usage)
-- [License](#license)
+# AutoScout24 Scraper
 
 ## Overview
-
-Autoscout24 is a popular platform for buying and selling vehicles. This project allows you to gather vehicle listings and perform polynomial regression analysis on the average prices, categorized by mileage. By scraping Autoscout24's web pages, extracting metadata, and running regression analysis, you can gain insights into how mileage affects vehicle prices.
+The AutoScout24 Scraper is a Python-based project designed to scrape car listings from the AutoScout24 website. It collects data such as make, model, mileage, fuel type, first registration date, price, and location (zip code) of vehicles. The scraped data is stored in a MongoDB database for further analysis and use.
 
 ## Features
+- **Web Scraping**: Uses Selenium to scrape car listings from AutoScout24.
+- **Data Storage**: Saves scraped data into a MongoDB database, ensuring unique entries using a unique index on the `ad-link` field.
+- **GraphQL API**: Provides a GraphQL API for querying and managing scraping jobs.
+- **Scheduler**: Uses APScheduler to schedule periodic scraping jobs.
+- **Error Handling**: Handles duplicate entries and bulk write errors gracefully.
 
-- Web scraping of Autoscout24 listings.
-- Extraction of metadata from the HTML web code.
-- Polynomial regression analysis on average prices.
-- Selection of the best polynomial degree via k-fold cross-validation.
+## Project Structure
+- `AutoScout24Scraper.py`: Contains the main scraper class and logic for scraping and saving data.
+- `http_server.py`: Implements a Flask server with GraphQL endpoints for managing scraping jobs.
+- `schema.graphql`: Defines the GraphQL schema for the API.
+- `requirements.txt`: Lists the Python dependencies required for the project.
+- `scrape_results.csv`: Example CSV file containing scraped data.
+- `test_mongo_insertion.py`: Unit tests for MongoDB insertion logic.
+- `test_bulk_write_error.py`: Unit tests for handling bulk write errors.
 
-## Requirements
-
-Before using this project, ensure you have the following dependencies installed:
-
-- Python 3.x
-- Libraries in `requirements.txt`
-
-To install the required libraries, you can run the following command:
-
-```shell
-pip install -r requirements.txt
-```
+## Installation
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd autoscout24_scraping
+   ```
+2. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Ensure you have MongoDB installed and running locally.
+4. Download and set up the Chrome WebDriver compatible with your version of Google Chrome.
 
 ## Usage
+### Running the Scraper
+1. Edit the parameters in `AutoScout24Scraper.py` or use the GraphQL API to start a scraper.
+2. Run the scraper:
+   ```bash
+   python AutoScout24Scraper.py
+   ```
 
-1. Clone the repository to your local machine:
+### Starting the HTTP Server
+1. Start the Flask server:
+   ```bash
+   python http_server.py
+   ```
+2. Access the GraphQL Playground at `http://localhost:5000/graphql` to interact with the API.
 
-```shell
-git clone https://github.com/lorenzoelia/autoscout24_scraping.git
+### Example GraphQL Queries
+#### Start a Scraper
+```graphql
+mutation {
+  startScraper(
+    make: "volkswagen",
+    model: "golf",
+    interval: 3600,
+    version: "",
+    yearFrom: 2015,
+    yearTo: 2020,
+    powerFrom: 50,
+    powerTo: 200,
+    powerType: "kw",
+    zip: "38442-wolfsburg",
+    zipRadius: 200,
+    priceTo: 6000
+  )
+}
 ```
 
-2. Navigate to the project directory:
-
-```shell
-cd autoscout24_scraping
+#### Query Scraper Status
+```graphql
+query {
+  status {
+    make
+    model
+    running
+    documentsSaved
+    documentsFetched
+  }
+}
 ```
 
-3. Create the `listings` folder (if it doesn't already exist):
-
-```shell
-mkdir listings
+## Testing
+Run the unit tests to ensure everything is working correctly:
+```bash
+python -m unittest discover
 ```
 
-4. Run the Python script to perform the scraping and polynomial regression:
-
-```shell
-python main.py
-```
-
-5. The script will collect listings, preprocess the data, run regression analysis, and select the best polynomial degree.
-
-6. The results will be saved to files within the `listings` folder.
-
-7. Review the generated CSV files for listings and processed data.
+## Dependencies
+- Python 3.10
+- Selenium
+- Flask
+- Ariadne
+- APScheduler
+- MongoDB
+- Pandas
+- Graphene
 
 ## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-[MIT License](https://opensource.org/licenses/MIT)
+This project is licensed under the MIT License.
