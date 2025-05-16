@@ -1,0 +1,17 @@
+# .dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+.env
+venv/
+build/
+dist/
+.eggs/
+*.egg-info/
+.scrapy/
+selenium-screenshot-*.png
+scrape_results.csv

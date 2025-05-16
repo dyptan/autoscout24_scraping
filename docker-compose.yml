@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  autoscout24:
+    build: .
+    container_name: scraper
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/autoscout24
+    depends_on:
+      - mongo
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+        reservations:
+          memory: 2g
+
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    ports:
+      - "27017:27017"
+
+

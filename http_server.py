@@ -1,7 +1,7 @@
 # Acquired dependencies
 from flask import Flask, jsonify, request
 from ariadne import QueryType, MutationType, make_executable_schema, graphql_sync
-from ariadne.constants import PLAYGROUND_HTML
+from ariadne.explorer import ExplorerPlayground # Updated import
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 import time
@@ -115,9 +115,12 @@ def resolve_start_scraper(_, info, make, model, interval, version, yearFrom, yea
 # Create executable schema
 schema = make_executable_schema(type_defs, query, mutation)
 
-@app.route("/graphql", methods=["GET"])
-def graphql_playground():
-    return PLAYGROUND_HTML, 200
+# Retrieve HTML for the GraphiQL.
+explorer_html = ExplorerPlayground().html(None) # As per documentation
+
+@app.route("/playground", methods=["GET"])
+def graphql_playground(): # Renamed function to match common practice with Playground
+    return explorer_html, 200
 
 @app.route("/graphql", methods=["POST"])
 def graphql_server():
@@ -172,5 +175,9 @@ def scrape():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0")

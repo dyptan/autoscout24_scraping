@@ -1,8 +1,10 @@
 import time
 import pandas as pd
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
+import os
 
 
 class AutoScout24Scraper:
@@ -28,12 +30,17 @@ class AutoScout24Scraper:
         self.options = webdriver.ChromeOptions()
         self.options.add_argument("--incognito")
         self.options.add_argument("--ignore-certificate-errors")
-        self.options.add_argument("--headless") 
-        self.options.add_argument("--disable-gpu") 
-        self.options.add_argument("--no-sandbox")  
-        self.options.add_argument("--disable-dev-shm-usage")  
-        self.browser = webdriver.Chrome(options=self.options)
-        self.mongo_client = MongoClient("mongodb://localhost:27017/")
+        self.options.add_argument("--headless")
+        self.options.add_argument("--disable-gpu")
+        self.options.add_argument("--no-sandbox")
+        self.options.add_argument("--disable-dev-shm-usage")
+        # Explicitly set the Chromium binary location
+        self.options.binary_location = os.environ.get("CHROME_BIN", "/usr/bin/chromium")
+        # Use system chromedriver explicitly with Service object
+        chromedriver_path = os.environ.get("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
+        self.browser = webdriver.Chrome(service=Service(chromedriver_path), options=self.options)
+        mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017/autoscout24")
+        self.mongo_client = MongoClient(mongo_uri)
         self.db = self.mongo_client["autoscout24"]
         self.collection = self.db["listings"]
         self.collection.create_index("ad-link", unique=True, name="unique_ad_link", background=True)
