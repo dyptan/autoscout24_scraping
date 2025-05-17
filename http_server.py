@@ -1,5 +1,6 @@
 # Acquired dependencies
 from flask import Flask, jsonify, request
+from flask_cors import CORS  # Add this import
 from ariadne import QueryType, MutationType, make_executable_schema, graphql_sync
 from ariadne.explorer import ExplorerPlayground # Updated import
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -11,6 +12,7 @@ from pymongo.errors import BulkWriteError
 
 # Initialize Flask app and scheduler
 app = Flask(__name__)
+CORS(app, resources={r"/graphql": {"origins": "*"}})  # Explicitly allow all origins for /graphql
 scheduler = BackgroundScheduler()
 scheduler.start()
 
@@ -116,10 +118,12 @@ def resolve_start_scraper(_, info, make, model, interval, version, yearFrom, yea
 schema = make_executable_schema(type_defs, query, mutation)
 
 # Retrieve HTML for the GraphiQL.
-explorer_html = ExplorerPlayground().html(None) # As per documentation
+explorer_html = ExplorerPlayground().html(None)
 
-@app.route("/playground", methods=["GET"])
-def graphql_playground(): # Renamed function to match common practice with Playground
+@app.route("/playground", methods=["GET", "POST"])
+def graphql_playground():
+    if request.method == "POST":
+        return graphql_server()
     return explorer_html, 200
 
 @app.route("/graphql", methods=["POST"])
