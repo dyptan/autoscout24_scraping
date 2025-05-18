@@ -20,6 +20,18 @@ type ScraperStatus {
 type Query {
     status: [ScraperStatus]
     fetchJobData(job_id: String!): [JobData]
+    fetchSavedDocuments(
+        page: Int, 
+        pageSize: Int, 
+        model: String, 
+        mileageMin: Int, 
+        mileageMax: Int, 
+        yearMin: Int, 
+        yearMax: Int, 
+        priceMin: Int, 
+        priceMax: Int, 
+        createdAfter: ZonedDateTime
+    ): [SavedDocument]
 }
 
 type Mutation {
@@ -51,3 +63,16 @@ type JobData {
     zip: Int
     ad_link: String
 }
+
+type SavedDocument {
+    id: String
+    make: String
+    model: String
+    year: Int
+    price: Int
+    mileage: Int
+    location: String
+    createdAt: String
+}
+
+scalar ZonedDateTime

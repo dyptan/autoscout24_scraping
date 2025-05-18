@@ -1,7 +1,6 @@
 # Acquired dependencies
 from flask import Flask, jsonify, request
-from flask_cors import CORS  # Add this import
-from ariadne import QueryType, MutationType, make_executable_schema, graphql_sync
+from ariadne import QueryType, MutationType, make_executable_schema, graphql_sync, ScalarType
 from ariadne.explorer import ExplorerPlayground # Updated import
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
@@ -9,10 +8,10 @@ import time
 from AutoScout24Scraper import AutoScout24Scraper
 from datetime import datetime
 from pymongo.errors import BulkWriteError
+from pymongo import MongoClient
 
 # Initialize Flask app and scheduler
 app = Flask(__name__)
-CORS(app, resources={r"/graphql": {"origins": "*"}})  # Explicitly allow all origins for /graphql
 scheduler = BackgroundScheduler()
 scheduler.start()
 
@@ -92,17 +91,17 @@ def resolve_start_scraper(_, info, make, model, interval, version, yearFrom, yea
         print(f"Job {scraper_id} is starting.")
         scraper.scrape(num_pages=1, verbose=True)
         fetched_count = len(scraper.listing_frame)
-
-        # Save to MongoDB and count only successfully saved documents
+        now = datetime.now()
+        for doc in scraper.listing_frame:
+            if "createdAt" not in doc:
+                doc["createdAt"] = now
         saved_count = scraper.save_to_mongo()
-        # Update the documentsFetched and documentsSaved counts
         for scraper_entry in scrapers:
             if scraper_entry["scraper_id"] == scraper_id:
                 scraper_entry["documentsFetched"] += fetched_count
                 scraper_entry["documentsSaved"] += saved_count
                 break
 
-    # Schedule the scraper to run using APScheduler
     scheduler.add_job(
         func=run_scraper,
         trigger="interval",
@@ -114,8 +113,75 @@ def resolve_start_scraper(_, info, make, model, interval, version, yearFrom, yea
 
     return True
 
+@query.field("fetchSavedDocuments")
+def resolve_fetch_saved_documents(_, info, page=1, pageSize=10, model=None, mileageMin=None, mileageMax=None, yearMin=None, yearMax=None, priceMin=None, priceMax=None, createdAfter=None, db_name="autoscout24"):
+    from pymongo import MongoClient
+    client = MongoClient("mongodb://localhost:27017/")
+    db = client[db_name]
+    collection = db.saved_documents
+
+    # Build the query with filters
+    query_filter = {}
+    if model:
+        query_filter["model"] = model
+    if mileageMin is not None:
+        query_filter["mileage"] = {"$gte": mileageMin}
+    if mileageMax is not None:
+        query_filter.setdefault("mileage", {}).update({"$lte": mileageMax})
+    if yearMin is not None:
+        query_filter["year"] = {"$gte": yearMin}
+    if yearMax is not None:
+        query_filter.setdefault("year", {}).update({"$lte": yearMax})
+    if priceMin is not None:
+        query_filter["price"] = {"$gte": priceMin}
+    if priceMax is not None:
+        query_filter.setdefault("price", {}).update({"$lte": priceMax})
+    if createdAfter:
+        query_filter["createdAt"] = {"$gte": createdAfter}
+
+    # Calculate skip and limit for pagination
+    skip = (page - 1) * pageSize
+    limit = pageSize
+
+    # Fetch documents with pagination
+    query = collection.find(query_filter).skip(skip).limit(limit)
+    documents = [
+        {
+            "id": str(doc.get("_id")),
+            "make": doc.get("make"),
+            "model": doc.get("model"),
+            "year": doc.get("year"),
+            "price": doc.get("price"),
+            "mileage": doc.get("mileage"),
+            "location": doc.get("location"),
+            "createdAt": doc.get("createdAt")
+        }
+        for doc in query
+    ]
+
+    # Debug: Log the documents being returned
+    print("Documents Returned:", documents)
+
+    return documents
+
+# Custom scalar for ZonedDateTime
+zoned_datetime_scalar = ScalarType("ZonedDateTime")
+
+@zoned_datetime_scalar.serializer
+def serialize_zoned_datetime(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    raise ValueError("Value is not a valid datetime object")
+
+@zoned_datetime_scalar.value_parser
+def parse_zoned_datetime(value):
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError("Invalid ISO 8601 datetime format")
+
 # Create executable schema
-schema = make_executable_schema(type_defs, query, mutation)
+schema = make_executable_schema(type_defs, query, mutation, zoned_datetime_scalar)
 
 # Retrieve HTML for the GraphiQL.
 explorer_html = ExplorerPlayground().html(None)
