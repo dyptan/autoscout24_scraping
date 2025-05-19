@@ -1,5 +1,6 @@
 # Acquired dependencies
 from flask import Flask, jsonify, request
+from flask_cors import CORS  # Add this import
 from ariadne import QueryType, MutationType, make_executable_schema, graphql_sync, ScalarType
 from ariadne.explorer import ExplorerPlayground # Updated import
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -9,9 +10,11 @@ from AutoScout24Scraper import AutoScout24Scraper
 from datetime import datetime
 from pymongo.errors import BulkWriteError
 from pymongo import MongoClient
+import os
 
 # Initialize Flask app and scheduler
 app = Flask(__name__)
+CORS(app, resources={r"/graphql": {"origins": "*"}})  # Explicitly allow all origins for /graphql
 scheduler = BackgroundScheduler()
 scheduler.start()
 
@@ -91,17 +94,17 @@ def resolve_start_scraper(_, info, make, model, interval, version, yearFrom, yea
         print(f"Job {scraper_id} is starting.")
         scraper.scrape(num_pages=1, verbose=True)
         fetched_count = len(scraper.listing_frame)
-        now = datetime.now()
-        for doc in scraper.listing_frame:
-            if "createdAt" not in doc:
-                doc["createdAt"] = now
+
+        # Save to MongoDB and count only successfully saved documents
         saved_count = scraper.save_to_mongo()
+        # Update the documentsFetched and documentsSaved counts
         for scraper_entry in scrapers:
             if scraper_entry["scraper_id"] == scraper_id:
                 scraper_entry["documentsFetched"] += fetched_count
                 scraper_entry["documentsSaved"] += saved_count
                 break
 
+    # Schedule the scraper to run using APScheduler
     scheduler.add_job(
         func=run_scraper,
         trigger="interval",
@@ -114,11 +117,25 @@ def resolve_start_scraper(_, info, make, model, interval, version, yearFrom, yea
     return True
 
 @query.field("fetchSavedDocuments")
-def resolve_fetch_saved_documents(_, info, page=1, pageSize=10, model=None, mileageMin=None, mileageMax=None, yearMin=None, yearMax=None, priceMin=None, priceMax=None, createdAfter=None, db_name="autoscout24"):
+def resolve_fetch_saved_documents(
+    _, info, page=1, pageSize=10, model=None, mileageMin=None, mileageMax=None,
+    yearMin=None, yearMax=None, priceMin=None, priceMax=None, createdAfter=None,
+    db_name=None, collectionName=None, collection_name="saved_documents"
+):
     from pymongo import MongoClient
-    client = MongoClient("mongodb://localhost:27017/")
-    db = client[db_name]
-    collection = db.saved_documents
+    from datetime import datetime
+    from pymongo.errors import ConfigurationError
+
+    # Use environment variables for MongoDB connection
+    mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017/autoscout24")
+    collection_to_use = collectionName if collectionName else collection_name
+
+    client = MongoClient(mongo_uri)
+    try:
+        db = client.get_default_database()
+    except ConfigurationError:
+        raise RuntimeError("MongoDB URI must include the database name, e.g. mongodb://localhost:27017/mydb")
+    collection = db[collection_to_use]
 
     # Build the query with filters
     query_filter = {}
@@ -137,7 +154,15 @@ def resolve_fetch_saved_documents(_, info, page=1, pageSize=10, model=None, mile
     if priceMax is not None:
         query_filter.setdefault("price", {}).update({"$lte": priceMax})
     if createdAfter:
-        query_filter["createdAt"] = {"$gte": createdAfter}
+        # Accept both string and datetime for createdAfter
+        if isinstance(createdAfter, datetime):
+            created_after_date = createdAfter
+        else:
+            created_after_date = datetime.fromisoformat(str(createdAfter))
+        query_filter["createdAt"] = {"$gte": created_after_date}
+
+    # Debug: Log the query filter
+    print("Query Filter:", query_filter)
 
     # Calculate skip and limit for pagination
     skip = (page - 1) * pageSize

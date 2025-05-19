@@ -5,6 +5,7 @@ from selenium.webdriver.chrome.service import Service
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 import os
+from datetime import datetime
 
 
 class AutoScout24Scraper:
@@ -111,6 +112,9 @@ class AutoScout24Scraper:
             duplicate_count = 0
 
             for record in data:
+                # Ensure createdAt is set for every document
+                if "createdAt" not in record or not record["createdAt"]:
+                    record["createdAt"] = datetime.now()
                 try:
                     self.collection.insert_one(record)
                     successfully_saved += 1

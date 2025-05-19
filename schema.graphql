@@ -30,7 +30,8 @@ type Query {
         yearMax: Int, 
         priceMin: Int, 
         priceMax: Int, 
-        createdAfter: ZonedDateTime
+        createdAfter: ZonedDateTime,
+        collectionName: String
     ): [SavedDocument]
 }
 

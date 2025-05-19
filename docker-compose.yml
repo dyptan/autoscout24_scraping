@@ -6,6 +6,7 @@ services:
       - "5000:5000"
     environment:
       - MONGO_URI=mongodb://mongo:27017/autoscout24
+      - MONGO_COLLECTION=listings
     depends_on:
       - mongo
     deploy:
