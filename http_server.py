@@ -1,20 +1,15 @@
 # Acquired dependencies
 from flask import Flask, jsonify, request
-from flask_cors import CORS  # Add this import
 from ariadne import QueryType, MutationType, make_executable_schema, graphql_sync, ScalarType
 from ariadne.explorer import ExplorerPlayground # Updated import
 from apscheduler.schedulers.background import BackgroundScheduler
-import threading
 import time
 from AutoScout24Scraper import AutoScout24Scraper
 from datetime import datetime
-from pymongo.errors import BulkWriteError
-from pymongo import MongoClient
 import os
 
 # Initialize Flask app and scheduler
 app = Flask(__name__)
-CORS(app, resources={r"/graphql": {"origins": "*"}})  # Explicitly allow all origins for /graphql
 scheduler = BackgroundScheduler()
 scheduler.start()
 
@@ -170,19 +165,16 @@ def resolve_fetch_saved_documents(
 
     # Fetch documents with pagination
     query = collection.find(query_filter).skip(skip).limit(limit)
-    documents = [
-        {
-            "id": str(doc.get("_id")),
-            "make": doc.get("make"),
-            "model": doc.get("model"),
-            "year": doc.get("year"),
-            "price": doc.get("price"),
-            "mileage": doc.get("mileage"),
-            "location": doc.get("location"),
-            "createdAt": doc.get("createdAt")
-        }
-        for doc in query
-    ]
+    documents = []
+    for doc in query:
+        # Pass through all fields directly, converting ObjectId and datetime
+        doc_out = {k: (str(v) if k == '_id' else v) for k, v in doc.items()}
+        if '_id' in doc_out:
+            doc_out['id'] = doc_out.pop('_id')
+        # Convert datetime fields to isoformat string
+        if 'createdAt' in doc_out and hasattr(doc_out['createdAt'], 'isoformat'):
+            doc_out['createdAt'] = doc_out['createdAt'].isoformat(sep=' ')
+        documents.append(doc_out)
 
     # Debug: Log the documents being returned
     print("Documents Returned:", documents)
@@ -275,4 +267,4 @@ def health():
     return jsonify({'status': 'ok'}), 200
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    app.run(debug=True, host="0.0.0.0", port=8086)

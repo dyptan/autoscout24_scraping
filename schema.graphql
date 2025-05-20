@@ -69,11 +69,14 @@ type SavedDocument {
     id: String
     make: String
     model: String
-    year: Int
     price: Int
     mileage: Int
     location: String
     createdAt: String
+    first_registration: String
+    fuel_type: String
+    zip: Int
+    ad_link: String
 }
 
 scalar ZonedDateTime

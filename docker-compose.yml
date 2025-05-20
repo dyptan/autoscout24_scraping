@@ -3,7 +3,7 @@ services:
   scraper:
     build: .
     ports:
-      - "5000:5000"
+      - "8086:8086"
     environment:
       - MONGO_URI=mongodb://mongo:27017/autoscout24
       - MONGO_COLLECTION=listings

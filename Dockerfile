@@ -46,7 +46,7 @@ RUN pip install --upgrade pip && \
 COPY . /app/
 
 # Expose the port for Flask
-EXPOSE 5000
+EXPOSE 8086
 
 # Default command to run the Flask server
 CMD ["python", "http_server.py"]

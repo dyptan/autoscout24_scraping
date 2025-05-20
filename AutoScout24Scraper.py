@@ -1,7 +1,6 @@
 import time
 import pandas as pd
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 import os
@@ -10,6 +9,7 @@ from datetime import datetime
 
 class AutoScout24Scraper:
     def __init__(self, make, model, version, year_from, year_to, power_from, power_to, powertype, zip, zipr, price_to, scraper_id):
+        print(f"[AutoScout24Scraper] Initializing with: make={make}, model={model}, version={version}, year_from={year_from}, year_to={year_to}, power_from={power_from}, power_to={power_to}, powertype={powertype}, zip={zip}, zipr={zipr}, price_to={price_to}, scraper_id={scraper_id}")
         self.scraper_id = scraper_id
         self.make = make
         self.model = model
@@ -26,8 +26,9 @@ class AutoScout24Scraper:
                          "fregfrom={year_from}&fregto={year_to}&powerfrom={power_from}&powerto={power_to}&"
                          "powertype={powertype}&priceto={price_to}&sort=standard&"
                          "source=homepage_search-mask&ustate=N%2CU&zip={zip}&zipr={zipr}")
+        print(f"[AutoScout24Scraper] Base URL: {self.base_url}")
         self.listing_frame = pd.DataFrame(
-            columns=["make", "model", "mileage", "fuel-type", "first-registration", "price"])
+            columns=["make", "model", "mileage", "fuel_type", "first_registration", "price", "zip", "ad_link", "location"])
         self.options = webdriver.ChromeOptions()
         self.options.add_argument("--incognito")
         self.options.add_argument("--ignore-certificate-errors")
@@ -35,16 +36,20 @@ class AutoScout24Scraper:
         self.options.add_argument("--disable-gpu")
         self.options.add_argument("--no-sandbox")
         self.options.add_argument("--disable-dev-shm-usage")
-        # Explicitly set the Chromium binary location
-        self.options.binary_location = os.environ.get("CHROME_BIN", "/usr/bin/chromium")
-        # Use system chromedriver explicitly with Service object
-        chromedriver_path = os.environ.get("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
-        self.browser = webdriver.Chrome(service=Service(chromedriver_path), options=self.options)
+        chrome_bin = os.environ.get("CHROME_BIN")
+        if chrome_bin:
+            print(f"[AutoScout24Scraper] Using CHROME_BIN: {chrome_bin}")
+            self.options.binary_location = chrome_bin
+        # Use Selenium Manager to auto-detect ChromeDriver (Selenium 4.6+)
+        print("[AutoScout24Scraper] Using Selenium Manager to auto-detect ChromeDriver")
+        self.browser = webdriver.Chrome(options=self.options)
         mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017/autoscout24")
+        print(f"[AutoScout24Scraper] Connecting to MongoDB at: {mongo_uri}")
         self.mongo_client = MongoClient(mongo_uri)
         self.db = self.mongo_client["autoscout24"]
         self.collection = self.db["listings"]
-        self.collection.create_index("ad-link", unique=True, name="unique_ad_link", background=True)
+        print(f"[AutoScout24Scraper] Using DB: {self.db.name}, Collection: {self.collection.name}")
+        self.collection.create_index("ad_link", unique=True, name="unique_ad_link", background=True)
 
     def generate_urls(self, num_pages):
         url_list = [self.base_url.format(make=self.make, model=self.model, version=self.version, year_from=self.year_from, year_to=self.year_to,
@@ -58,7 +63,17 @@ class AutoScout24Scraper:
 
     def scrape(self, num_pages, verbose=True):
         # Clear the listing_frame at the start of each job cycle
-        self.listing_frame = pd.DataFrame(columns=["make", "model", "mileage", "fuel-type", "first-registration", "price"])
+        self.listing_frame = pd.DataFrame(columns=["make", "model", "mileage", "fuel_type", "first_registration", "price", "zip", "ad_link", "location"])
+
+        # Parse location from zip if possible
+        location = None
+        if isinstance(self.zip, str) and '-' in self.zip:
+            # e.g. '38442-wolfsburg' -> 'wolfsburg'
+            location = self.zip.split('-', 1)[1].strip()
+        elif isinstance(self.zip, str):
+            location = self.zip
+        elif isinstance(self.zip, int):
+            location = str(self.zip)
 
         url_list = []
         for page in range(1, num_pages + 1):
@@ -91,11 +106,12 @@ class AutoScout24Scraper:
                     "make": data_make,
                     "model": data_model,
                     "mileage": data_mileage,
-                    "fuel-type": data_fuel_type,
-                    "first-registration": data_first_registration,
+                    "fuel_type": data_fuel_type,
+                    "first_registration": data_first_registration,
                     "price": data_price,
                     "zip": data_zip_code,
-                    "ad-link": ad_link  # Add the ad link to the data
+                    "ad_link": ad_link,
+                    "location": location
                 }
 
                 if verbose:
